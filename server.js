@@ -1,191 +1,176 @@
-//1. まずはexpressというnode.jsの機能を使えるよう読み込みましょう🤗
-const { Prisma } = require("@prisma/client");
+// 1. 必要なモジュールを読み込む
+const { PrismaClient } = require("@prisma/client");
 const express = require("express");
-
-// 2. ここで実行をします🤗appの箱の中でexpressの機能が使えるようにしています🤗
-const app = express();
-
-// CORS対策 npm i corsをしてインストールしてから記述🤗
 const cors = require("cors");
 
-// prismaのclientの機能を使えるようにする🤗
-const { PrismaClient } = require("@prisma/client");
-
-// パスワードハッシュ化
-const bcrypt = require("bcrypt");
-
-// json web token jwtの機能を設定します🤗
-const jwt = require("jsonwebtoken");
-
-// 環境変数=秘密の鍵が使えるようにdotenvを記述して使えるようにします🤗
-require("dotenv");
-
-// clientの機能を使えるように設定する
+const app = express();
 const prisma = new PrismaClient();
 
-//3. PORT=どの番号で画面のURLを設定するかというものです🤗
-// 例: 8888の場合は localhost:8888になります🤗
-const PORT = process.env.PORT || 8888;
+// 2. ポート番号を設定
+const PORT = 8888;
 
-// 必ずexpress.json()の上で記述！そうしないとcorsが回避できません！！
+// 3. ミドルウェア設定
 app.use(cors());
-
-// jsで書いた文字列をjsonとしてexpressで使えるようにする必要があります🤗
 app.use(express.json());
 
-// ミドルウェア=レストランの入り口 で 「予約がしてる？」の確認のようなイメージ🤗
-// 予約（＝トークン）がある人 → 店内（＝APIの処理）に進める
-// 予約がない人 → 入れない（エラーになる）
-const authenticateToken = (req, res, next) => {
-  console.log("Authorization ヘッダー:", req.headers.authorization);
-
-  const token = req.headers.authorization?.split(" ")[1]; //予約（トークン）を取り出す
-  console.log("抽出されたトークン:", token);
-
-  if (!token) {
-    // 予約（トークン）がない場合は入れない
-    return res.status(401).json({ message: "認証トークンが必要です。" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.KEY); //予約（トークン）を確認
-    console.log("デコード結果:", decoded);
-
-    req.user = decoded; //OKならユーザー情報を設定🤗
-    next(); // 店（APIの処理）に進める
-  } catch (error) {
-    console.log("JWT 検証エラー:", error);
-    return res.status(403).json({ message: "無効なトークンです。" });
-  }
-};
-
-// 5.簡単なAPIの挙動を確認、作成してみます🤗
-// getはデータを表示するようなイメージです🤗
-
+// 4. ルートエンドポイント（テスト用）
 app.get("/", (req, res) => {
-  res.send("<h1>おおほりは長野で研究しています!!</h1>");
+  res.send("<h1>Vision Runner API サーバー稼働中！</h1>");
 });
 
-//6.新規ユーザー登録のAPIを作成します🤗
-app.post("/api/auth/register", async (req, res) => {
-  // 送られるものを抜き出します🤗分割代入 es6の新しいおまじないです🤗
-  const { username, email, password } = req.body;
-
-  // 暗号化対応=bcryptを使ってハッシュ化する🤗
-  const hasedPass = await bcrypt.hash(password, 10);
-
-  // ここがプリズマの文法になります🤗[user]はモデルUserになります🤗
-  const user = await prisma.user.create({
-    data: {
-      username,
-      email,
-      password: hasedPass,
-    },
-  });
-
-  // prismaにデータを送った後にjsonでデータを戻します🤗
-  return res.json({ user });
-
-  // 下は消さない
-});
-
-// 2025 2/16 7.ログインAPIの開発からスタートします🤗
-app.post("/api/auth/login", async (req, res) => {
-  // req  {
-  //   "email": "a@co.jp",
-  //   "password": "a"
-  // }
-
-  // email,passwordをチェックするために取得します🤗
-  const { email, password } = req.body;
-
-  //whereはSQL等で出てくる条件を絞るおまじないです🤗（正確にはSQL文です🤗）
-  const user = await prisma.user.findUnique({ where: { email } });
-
-  // emailがあるかないかを先ほどuserのところの箱に収納したので、if文でチェックします🤗
-  if (!user) {
-    return res.status(401).json({
-      error: "そのユーザーは存在しません",
-    });
-  }
-
-  // パスワードチェックの記述になります🤗
-  const isPasswordCheck = await bcrypt.compare(password, user.password);
-
-  // passwordがあるかないか、送られてきたものと、保存されているものをチェックしています🤗
-  if (!isPasswordCheck) {
-    return res.status(401).json({
-      error: "そのパスワードは間違っていますよ！！",
-    });
-  }
-
-  // email,パスワードをチェックし、無事見つけ出せたらチケット(token=乗車券)を発行します🤗
-  const token = jwt.sign({ id: user.id }, process.env.KEY, {
-    expiresIn: "1d",
-  });
-
-  return res.json({ token });
-
-  // この下は消さない
-});
-
-// 投稿API authenticateTokenは次のページで記述しています🤗
-app.post("/api/post", authenticateToken, async (req, res) => {
-  console.log("現在のユーザー ID:", req.user.id);
-  //userのidをチェックします🤗が流れとしては次のページを参考にしてください🤗
-
-  const { content } = req.body;
-  console.log(content, "content");
-  // contentが空の時=文字が入力されていないのでここでエラーでDBにデータを送らないようにする🤗
-  if (!content) {
-    return res.status(400).json({ message: "投稿内容が入力されていません" });
-  }
-
-  try {
-    // 成功した時にprismaを使用してデータを登録する🤗
-    const post = await prisma.post.create({
-      data: {
-        content,
-        authorId: req.user.id,
-      },
-      include: {
-        //ここはポイントになります！
-        author: true,
-      },
-    });
-    res.status(201).json(post);
-  } catch (err) {
-    console.log(err, "エラー内容");
-    res.status(500).json({ message: "サーバーエラーです。" });
-  }
-
-  // この下は消さない
-});
-
-// 投稿取得API🤗
+// 5. 投稿取得API（もともとある想定）
 app.get("/api/posts", async (req, res) => {
   try {
-    // 成功した時にprismaを使用してデータを取得🤗
     const posts = await prisma.post.findMany({
-      take: 10, //これで最新の10件を取得できる🤗超便利！,
-      orderBy: { createdAt: "desc" }, //これで登録日から降順で取得(登録された最後のものから順番に取得)
       include: {
-        //ここはポイントになります！
-        author: true,
+        author: true, // 投稿に紐づくユーザーも取得
+      },
+      orderBy: {
+        createdAt: "desc",
       },
     });
-    res.status(201).json(posts);
-  } catch (err) {
-    console.log(err, "エラー内容");
-    res.status(500).json({ message: "サーバーエラーです。" });
+    res.json(posts);
+  } catch (error) {
+    console.error("投稿の取得に失敗しました:", error);
+    res.status(500).json({ error: "投稿の取得に失敗しました" });
   }
-
-  // この下は消さない
 });
 
-// ここから上に絶対に書いてください🤗
+// ★6. 未来投稿を受け取る新しいAPIを追加！！
+app.post("/api/future", async (req, res) => {
+  try {
+    const { content } = req.body;
 
-//4.サーバーを起動させましょう🤗イメージはスイッチONにして動かす🤗
+    if (!content) {
+      return res.status(400).json({ error: "contentが必須です" });
+    }
+
+    const futurePost = await prisma.future.create({
+      data: {
+        content,
+      },
+    });
+
+    res.status(201).json(futurePost);
+  } catch (error) {
+    console.error("未来投稿の作成に失敗しました:", error);
+    res.status(500).json({ error: "未来投稿の作成に失敗しました" });
+  }
+});
+
+// 未来投稿 更新APIを追加
+app.put("/api/future/:id", async (req, res) => {
+  const { id } = req.params;
+  const { content } = req.body;
+
+  if (!content) {
+    return res.status(400).json({ error: "更新内容が空です" });
+  }
+
+  try {
+    const updatedFuture = await prisma.future.update({
+      where: { id: Number(id) },
+      data: { content },
+    });
+    res.json(updatedFuture);
+  } catch (error) {
+    console.error("未来投稿の更新に失敗しました:", error);
+    res.status(500).json({ error: "未来投稿の更新に失敗しました" });
+  }
+});
+
+// 未来投稿 削除APIを追加
+app.delete("/api/future/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await prisma.future.delete({
+      where: { id: Number(id) },
+    });
+    res.json({ message: "未来投稿を削除しました" });
+  } catch (error) {
+    console.error("未来投稿の削除に失敗しました:", error);
+    res.status(500).json({ error: "未来投稿の削除に失敗しました" });
+  }
+});
+
+// 未来投稿の一覧取得API
+app.get("/api/futures", async (req, res) => {
+  try {
+    const futures = await prisma.future.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+    res.json(futures);
+  } catch (error) {
+    console.error("未来投稿の取得に失敗しました:", error);
+    res.status(500).json({ error: "未来投稿の取得に失敗しました" });
+  }
+});
+
+// 未来ビジョンの新規投稿API（Postモデル用）
+app.post("/api/post", async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content) {
+      return res.status(400).json({ error: "contentが必須です" });
+    }
+
+    // 仮でauthorId=1 を付与して保存する（ログイン管理がまだなら）
+    const newPost = await prisma.post.create({
+      data: {
+        content,
+        authorId: 1, // 仮設定：適切にログインユーザーIDを紐づけるなら後で修正
+      },
+    });
+
+    res.status(201).json(newPost);
+  } catch (error) {
+    console.error("ビジョン投稿作成エラー:", error);
+    res.status(500).json({ error: "ビジョン投稿の作成に失敗しました" });
+  }
+});
+
+// 未来ビジョン 更新APIを追加
+app.put("/api/post/:id", async (req, res) => {
+  const { id } = req.params;
+  const { content } = req.body;
+
+  if (!content) {
+    return res.status(400).json({ error: "更新内容が空です" });
+  }
+
+  try {
+    const updatedPost = await prisma.post.update({
+      where: { id: Number(id) },
+      data: { content },
+    });
+    res.json(updatedPost);
+  } catch (error) {
+    console.error("ビジョン投稿の更新に失敗しました:", error);
+    res.status(500).json({ error: "ビジョン投稿の更新に失敗しました" });
+  }
+});
+
+// 未来ビジョン 削除APIを追加
+app.delete("/api/post/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await prisma.post.delete({
+      where: { id: Number(id) },
+    });
+    res.json({ message: "ビジョン投稿を削除しました" });
+  } catch (error) {
+    console.error("ビジョン投稿の削除に失敗しました:", error);
+    res.status(500).json({ error: "ビジョン投稿の削除に失敗しました" });
+  }
+});
+
+
+
+// 7. サーバー起動
 app.listen(PORT, () => {
-  console.log("server start!!!!!!");
+  console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });

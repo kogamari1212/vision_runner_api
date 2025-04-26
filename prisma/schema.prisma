@@ -29,3 +29,10 @@ model Post {
   author    User     @relation(fields: [authorId], references: [id])
 }
 
+model Future {
+  id        Int      @id @default(autoincrement())
+  content   String
+  createdAt DateTime @default(now())
+}
+
+
