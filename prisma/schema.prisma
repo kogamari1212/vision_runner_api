@@ -35,4 +35,11 @@ model Future {
   createdAt DateTime @default(now())
 }
 
+model Task {
+  id        Int      @id @default(autoincrement())
+  content   String
+  createdAt DateTime @default(now())
+}
+
+
 
