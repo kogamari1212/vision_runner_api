@@ -19,7 +19,12 @@ const prisma = new PrismaClient();
 //const PORT = 8888;
 
 // 3. ミドルウェア設定
-app.use(cors());
+app.use(cors({
+  origin: "https://vision-runner.vercel.app", // ✅ フロントのドメイン
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true, // cookie使わないなら false でもOK
+}));
+
 app.use(express.json());
 
 // 4. ルートエンドポイント（テスト用）
