@@ -19,11 +19,17 @@ const prisma = new PrismaClient();
 //const PORT = 8888;
 
 // 3. ミドルウェア設定
+const allowedOrigins = [
+  "http://localhost:3000",            // ローカル開発用
+  "https://vision-runner.vercel.app"  // 本番用
+];
+
 app.use(cors({
-  origin: "https://vision-runner.vercel.app", // ✅ フロントのドメイン
+  origin: allowedOrigins,
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true, // cookie使わないなら false でもOK
+  credentials: true,
 }));
+
 
 app.use(express.json());
 
