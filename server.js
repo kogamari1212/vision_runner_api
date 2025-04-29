@@ -4,10 +4,19 @@ const express = require("express");
 const cors = require("cors");
 
 const app = express();
+// パスワードハッシュ化
+const bcrypt = require("bcrypt");
+
+// json web token jwtの機能を設定します🤗
+const jwt = require("jsonwebtoken");
+
+// 環境変数=秘密の鍵が使えるようにdotenvを記述して使えるようにします🤗
+require("dotenv");
 const prisma = new PrismaClient();
 
+
 // 2. ポート番号を設定
-const PORT = 8888;
+//const PORT = 8888;
 
 // 3. ミドルウェア設定
 app.use(cors());
@@ -109,6 +118,75 @@ app.get("/api/futures", async (req, res) => {
   }
 });
 
+// ユーザー登録API
+app.post("/api/auth/register", async (req, res) => {
+  const { username, email, password } = req.body;
+
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: "全ての項目を入力してください" });
+  }
+
+  try {
+    // パスワードをハッシュ化
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 新規ユーザー作成
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        email,
+        password: hashedPassword,
+      },
+    });
+
+    res.status(201).json({ message: "ユーザー登録成功", user: newUser });
+  } catch (error) {
+    console.error("ユーザー登録失敗:", error);
+    res.status(500).json({ error: "登録に失敗しました" });
+  }
+});
+
+// ログインAPI
+app.post("/api/auth/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "全ての項目を入力してください" });
+  }
+
+  try {
+    // ① メールアドレスでユーザー検索
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: "メールアドレスが正しくありません" });
+    }
+
+    // ② パスワードを比較する
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "パスワードが正しくありません" });
+    }
+
+    // ③ ログイン成功なら（ここでは仮でJWTトークンも作れる）
+    const token = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_SECRET || "defaultsecret", // ※環境変数にjwt secretを設定するのが本当は望ましい
+      { expiresIn: "1h" }
+    );
+
+    res.json({ message: "ログイン成功", token, user });
+  } catch (error) {
+    console.error("ログイン失敗:", error);
+    res.status(500).json({ error: "ログインに失敗しました" });
+  }
+});
+
+
+
 // 未来ビジョンの新規投稿API（Postモデル用）
 app.post("/api/post", async (req, res) => {
   try {
@@ -170,7 +248,11 @@ app.delete("/api/post/:id", async (req, res) => {
 
 
 
+
+
 // 7. サーバー起動
+const PORT = process.env.PORT || 8888; // ★ここを絶対こうする
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });
+
